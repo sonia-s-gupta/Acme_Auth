@@ -20,6 +20,21 @@ const path = require('path');
 app.get('/', (req, res)=> res.sendFile(path.join(__dirname, '../client/dist/index.html')));
 app.use('/assets', express.static(path.join(__dirname, '../client/dist/assets'))); 
 
+// Middleware to check if user is logged in
+// This middleware should be used for any route that requires authentication
+const isLoggedIn = (req, res, next) => {
+  const token = req.headers.authorization; // Get the token from the request headers
+  if (!token) {
+    return res.status(401).json({ error: 'Unauthorized' }); // If no token, return 401
+  }
+  try {
+    const user = findUserWithToken(token); // Verify the token and get the user
+    req.user = user; // Attach the user to the request object
+    next();
+  } catch (error) {
+    return res.status(401).json({ error: 'Unauthorized' }); // If token is invalid, return 401
+  }
+};
 
 app.post('/api/auth/login', async(req, res, next)=> {
   try {
@@ -30,9 +45,10 @@ app.post('/api/auth/login', async(req, res, next)=> {
   }
 });
 
-app.get('/api/auth/me', async(req, res, next)=> {
+// Uses the isLoggedIn middleware for routes that require authentication
+app.get('/api/auth/me', isLoggedIn, async(req, res, next)=> {
   try {
-    res.send(await findUserWithToken(req.headers.authorization));
+    res.send(req.user); // Send the user object attached to the request);
   }
   catch(ex){
     next(ex);
@@ -98,11 +114,16 @@ const init = async()=> {
   await createTables();
   console.log('tables created');
 
-  const [moe, lucy, ethyl, curly, foo, bar, bazz, quq, fip] = await Promise.all([
+  // Check for existing users before seeding
+  const existingUsers = await fetchUsers();
+  if (existingUsers.length === 0) {
+  const [moe, lucy, ethyl, curly] = await Promise.all([
     createUser({ username: 'moe', password: 'm_pw'}),
     createUser({ username: 'lucy', password: 'l_pw'}),
     createUser({ username: 'ethyl', password: 'e_pw'}),
-    createUser({ username: 'curly', password: 'c_pw'}),
+    createUser({ username: 'curly', password: 'c_pw'})
+  ]);
+  const [foo, bar, bazz, quq, fip] = await Promise.all([
     createProduct({ name: 'foo' }),
     createProduct({ name: 'bar' }),
     createProduct({ name: 'bazz' }),
@@ -110,11 +131,14 @@ const init = async()=> {
     createProduct({ name: 'fip' })
   ]);
 
+  console.log('users and products created'); 
   console.log(await fetchUsers());
   console.log(await fetchProducts());
 
   console.log(await fetchFavorites(moe.id));
   const favorite = await createFavorite({ user_id: moe.id, product_id: foo.id });
+
+}
   app.listen(port, ()=> console.log(`listening on port ${port}`));
 };
 
