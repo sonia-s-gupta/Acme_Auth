@@ -1,3 +1,5 @@
+const jwt = require('jsonwebtoken'); // for importing JWT
+const JWT = process.env.JWT || 'shhh'; // for token secret
 const {
   client,
   createTables,
@@ -48,6 +50,7 @@ app.post('/api/auth/register', async(req, res, next)=> {
     const newUser = await createUser({ username, password });
     // Generate a token for the new user
     const token = await jwt.sign({ id: newUser.id }, JWT);
+    console.log('token', token);
     res.status(201).json({ user: newUser, token }); // Send the new user and token in the response
   } catch (ex) {
     next(ex);
@@ -148,7 +151,7 @@ const init = async()=> {
     createProduct({ name: 'quq' }),
     createProduct({ name: 'fip' })
   ]);
-  }
+  
   console.log('users and products created'); 
   console.log(await fetchUsers());
   console.log(await fetchProducts());
@@ -156,7 +159,9 @@ const init = async()=> {
   console.log(await fetchFavorites(moe.id));
   const favorite = await createFavorite({ user_id: moe.id, product_id: foo.id });
 }
+
   app.listen(port, ()=> console.log(`listening on port ${port}`));
+};
 
 init();
 
