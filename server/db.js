@@ -45,6 +45,23 @@ const createProduct = async({ name })=> {
   return response.rows[0];
 };
 
+// Create authentication middleware
+const authenticate = async({ username, password })=> {
+  const SQL = `
+    SELECT id, password FROM users WHERE username=$1;
+  `;
+  const response = await client.query(SQL, [username]);
+  // Updated to check if no user found or password does not match
+  if(!response.rows.length || (await bcrypt.compare(password, response.rows[0].password)) === false){
+    const error = Error('not authorized');
+    error.status = 401;
+    throw error;
+  }
+  const token = await jwt.sign({ id: response.rows[0].id }, JWT); // signing the token
+  console.log(token); // for debugging
+  return { token }; // return the token
+};
+
 const createFavorite = async({ user_id, product_id })=> {
   const SQL = `
     INSERT INTO favorites(id, user_id, product_id) VALUES($1, $2, $3) RETURNING *
@@ -60,26 +77,10 @@ const destroyFavorite = async({ user_id, id })=> {
   await client.query(SQL, [user_id, id]);
 };
 
-const authenticate = async({ username, password })=> {
-  const SQL = `
-    SELECT id, password FROM users WHERE username=$1; 
-  `;
-  const response = await client.query(SQL, [username]);
-  // Updated to check if no user found or password does not match
-  if(!response.rows.length || (await bcrypt.compare(password, response.rows[0].password)) === false){ 
-    const error = Error('not authorized');
-    error.status = 401;
-    throw error;
-  }
-  const token = await jwt.sign({ id: response.rows[0].id }, JWT); // signing the token
-  console.log(token); // for debugging
-  return { token }; // return the token
-};
-
 const findUserWithToken = async(token)=> {
   let id;
   try {
-    const payload = await jwt.verify(token, JWT); // verify the token
+    const payload = jwt.verify(token, JWT); // verify the token
     id = payload.id; 
   }
   catch(ex){
@@ -100,19 +101,29 @@ const findUserWithToken = async(token)=> {
 };
 
 const fetchUsers = async()=> {
+  try {
   const SQL = `
     SELECT id, username FROM users;
   `;
   const response = await client.query(SQL);
   return response.rows;
+} catch (error) {
+  console.error('Error fetching users:', error);
+  throw error; // Rethrow the error to be handled by the calling function
+}
 };
 
 const fetchProducts = async()=> {
+  try {
   const SQL = `
     SELECT * FROM products;
   `;
   const response = await client.query(SQL);
   return response.rows;
+} catch (error) {
+  console.error('Error fetching products:', error);
+  throw error; // Rethrow the error to be handled by the calling function
+}
 };
 
 const fetchFavorites = async(user_id)=> {

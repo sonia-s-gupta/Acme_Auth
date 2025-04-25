@@ -22,19 +22,37 @@ app.use('/assets', express.static(path.join(__dirname, '../client/dist/assets'))
 
 // Middleware to check if user is logged in
 // This middleware should be used for any route that requires authentication
-const isLoggedIn = (req, res, next) => {
+const isLoggedIn = async (req, res, next) => {
   const token = req.headers.authorization; // Get the token from the request headers
   if (!token) {
     return res.status(401).json({ error: 'Unauthorized' }); // If no token, return 401
   }
   try {
-    const user = findUserWithToken(token); // Verify the token and get the user
+    const user = await findUserWithToken(token); // Verify the token and get the user
     req.user = user; // Attach the user to the request object
     next();
   } catch (error) {
     return res.status(401).json({ error: 'Unauthorized' }); // If token is invalid, return 401
   }
 };
+
+// Added a new route for user registration
+// This route should create a new user and return the user object and a token
+app.post('/api/auth/register', async(req, res, next)=> {
+  try {
+    const { username, password } = req.body;
+    const existingUser = await client.query('SELECT * FROM users WHERE username = $1', [username]);
+    if (existingUser.rows.length > 0) {
+      return res.status(400).json({ error: 'Username already exists' });
+    }
+    const newUser = await createUser({ username, password });
+    // Generate a token for the new user
+    const token = await jwt.sign({ id: newUser.id }, JWT);
+    res.status(201).json({ user: newUser, token }); // Send the new user and token in the response
+  } catch (ex) {
+    next(ex);
+  }
+});
 
 app.post('/api/auth/login', async(req, res, next)=> {
   try {
@@ -46,7 +64,7 @@ app.post('/api/auth/login', async(req, res, next)=> {
 });
 
 // Uses the isLoggedIn middleware for routes that require authentication
-app.get('/api/auth/me', isLoggedIn, async(req, res, next)=> {
+app.get('/api/auth/me', isLoggedIn, (req, res, next)=> {
   try {
     res.send(req.user); // Send the user object attached to the request);
   }
@@ -130,17 +148,15 @@ const init = async()=> {
     createProduct({ name: 'quq' }),
     createProduct({ name: 'fip' })
   ]);
-
+  }
   console.log('users and products created'); 
   console.log(await fetchUsers());
   console.log(await fetchProducts());
 
   console.log(await fetchFavorites(moe.id));
   const favorite = await createFavorite({ user_id: moe.id, product_id: foo.id });
-
 }
   app.listen(port, ()=> console.log(`listening on port ${port}`));
-};
 
 init();
 

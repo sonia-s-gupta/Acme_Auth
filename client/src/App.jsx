@@ -1,18 +1,35 @@
 import { useState, useEffect } from 'react'
 
-const Login = ({ login })=> {
+
+const AuthForm = ({ authAction }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [isRegistering, setIsRegistering] = useState(false); // New state to track if the user is registering
+  const [error, setError] = useState(null); // New state to track error messages
 
-  const submit = ev => {
+  const submit = async (ev) => {
     ev.preventDefault();
-    login({ username, password });
-  }
+    setError(null); // Reset error state on submit
+
+  // Check if the user is registering or logging in
+    try {
+      await authAction({ username, password });
+    } catch (err) {
+      setError(err.message); // Set error message if login fails
+    }
+  };
+  
+  // Toggle between login and register
   return (
     <form onSubmit={ submit }>
       <input value={ username } placeholder='username' onChange={ ev=> setUsername(ev.target.value)}/>
       <input value={ password} placeholder='password' onChange={ ev=> setPassword(ev.target.value)}/>
-      <button disabled={ !username || !password }>Login</button>
+      <button disabled={!username || !password}>{isRegistering ? 'Register' : 'Login'}</button> 
+
+      {error && <div className="error">{error}</div>} {/* Display error message if exists */}
+      <button type="button" onClick={() => setIsRegistering(!isRegistering)}>
+      {isRegistering ? 'Already have an account? Login' : "Don't have an account? Register"}
+      </button>
     </form>
   );
 }
@@ -54,12 +71,22 @@ function App() {
     fetchProducts();
   }, []);
 
+  // Fetch favorites when auth changes
+  // If auth.id is not set, set favorites to an empty array
+  // If auth.id is set, fetch favorites from the server
   useEffect(()=> {
     const fetchFavorites = async()=> {
-      const response = await fetch(`/api/users/${auth.id}/favorites`);
+      const response = await fetch(`/api/users/${auth.id}/favorites`, {
+        headers: {
+          authorization: window.localStorage.getItem('token') // Pass the token in the headers
+        }
+      });
       const json = await response.json();
       if(response.ok){
         setFavorites(json);
+      }
+      else {
+        console.log(json); // Handle error
       }
     };
     if(auth.id){
@@ -70,19 +97,22 @@ function App() {
     }
   }, [auth]);
 
-  const login = async(credentials)=> {
-    const response = await fetch('/api/auth/login', {
+  // Update the login function to include the isRegistering state
+  const loginOrRegister = async({ username, password, isRegistering })=> {
+    const url = isRegistering ? '/api/auth/register' : '/api/auth/login';
+    const response = await fetch(url, {
       method: 'POST',
-      body: JSON.stringify(credentials),
+      body: JSON.stringify({ username, password }),
       headers: {
-        'Content-Type': 'application/json'
-      }
+        'Content-Type': 'application/json',
+      },
     });
 
     const json = await response.json();
     if(response.ok){
       window.localStorage.setItem('token', json.token);
-      attemptLoginWithToken();
+      // Directly set the auth state with the response
+     attemptLoginWithToken();
     }
     else {
       console.log(json);
@@ -94,7 +124,8 @@ function App() {
       method: 'POST',
       body: JSON.stringify({ product_id }),
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        authorization: window.localStorage.getItem('token') // Pass the token in the headers
       }
     });
 
@@ -105,11 +136,15 @@ function App() {
     else {
       console.log(json);
     }
-  }
+  };
 
   const removeFavorite = async(id)=> {
     const response = await fetch(`/api/users/${auth.id}/favorites/${id}`, {
       method: 'DELETE',
+      // Pass the token in the headers
+      headers: {
+        authorization: window.localStorage.getItem('token')
+      }
     });
 
     if(response.ok){
@@ -118,7 +153,7 @@ function App() {
     else {
       console.log(json);
     }
-  }
+  };
 
   const logout = ()=> {
     window.localStorage.removeItem('token');
@@ -128,8 +163,8 @@ function App() {
   return (
     <>
       {
-        !auth.id ? <Login login={ login }/> : <button onClick={ logout }>Logout { auth.username }</button>
-      }
+        // Check if auth.id is set to determine if the user is logged in
+        !auth.id ? <AuthForm authAction={loginOrRegister} /> : <button onClick={logout}>Logout {auth.username}</button>      }
       <ul>
         {
           products.map( product => {
@@ -149,7 +184,7 @@ function App() {
         }
       </ul>
     </>
-  )
+  );
 }
 
-export default App
+export default App;
